@@ -5,6 +5,7 @@ find_package(KF5NewStuff ${KF5_DEP_VERSION} REQUIRED) # For KMoreTools
 # hacks to make LSP stuff from QtCreator compile
 set(CMAKE_CXX_STANDARD 14)
 remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_FROM_BYTEARRAY -DQT_NO_CAST_TO_ASCII)
+kde_enable_exceptions()
 
 include_directories( ${CMAKE_CURRENT_BINARY_DIR} libs )
 
