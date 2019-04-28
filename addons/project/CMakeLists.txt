@@ -2,7 +2,11 @@ project(kateprojectplugin)
 
 find_package(KF5NewStuff ${KF5_DEP_VERSION} REQUIRED) # For KMoreTools
 
-include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
+# hacks to make LSP stuff from QtCreator compile
+set(CMAKE_CXX_STANDARD 14)
+remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_FROM_BYTEARRAY -DQT_NO_CAST_TO_ASCII)
+
+include_directories( ${CMAKE_CURRENT_BINARY_DIR} libs )
 
 add_definitions(-DTRANSLATION_DOMAIN=\"kateproject\")
 set(kateprojectplugin_PART_SRCS
@@ -28,6 +32,24 @@ set(kateprojectplugin_PART_SRCS
   tools/kateprojectcodeanalysistoolflake8.cpp
   tools/kateprojectcodeanalysistoolshellcheck.cpp
   tools/kateprojectcodeanalysisselector.cpp
+
+  # language server protocol from Qt Creator
+  libs/languageserverprotocol/basemessage.cpp
+  libs/languageserverprotocol/client.cpp
+  libs/languageserverprotocol/diagnostics.cpp
+  libs/languageserverprotocol/jsonobject.cpp
+  libs/languageserverprotocol/languagefeatures.cpp
+  libs/languageserverprotocol/lsputils.cpp
+  libs/languageserverprotocol/servercapabilities.cpp
+  libs/languageserverprotocol/textsynchronization.cpp
+  libs/languageserverprotocol/clientcapabilities.cpp
+  libs/languageserverprotocol/completion.cpp
+  libs/languageserverprotocol/initializemessages.cpp
+  libs/languageserverprotocol/jsonrpcmessages.cpp
+  libs/languageserverprotocol/lsptypes.cpp
+  libs/languageserverprotocol/messages.cpp
+  libs/languageserverprotocol/shutdownmessages.cpp
+  libs/languageserverprotocol/workspace.cpp
 )
 
 # resource for ui file and stuff
