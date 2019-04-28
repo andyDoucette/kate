@@ -51,6 +51,19 @@ set(kateprojectplugin_PART_SRCS
   libs/languageserverprotocol/messages.cpp
   libs/languageserverprotocol/shutdownmessages.cpp
   libs/languageserverprotocol/workspace.cpp
+  libs/utils/fileutils.cpp
+  libs/utils/hostosinfo.cpp
+  libs/utils/qtcassert.cpp
+  libs/utils/savefile.cpp
+  libs/utils/textutils.cpp
+  libs/utils/mimetypes/mimedatabase.cpp
+  libs/utils/mimetypes/mimeglobpattern.cpp
+  libs/utils/mimetypes/mimemagicrule.cpp
+  libs/utils/mimetypes/mimemagicrulematcher.cpp
+  libs/utils/mimetypes/mimeprovider.cpp
+  libs/utils/mimetypes/mimetype.cpp
+  libs/utils/mimetypes/mimetypeparser.cpp
+
 )
 
 # resource for ui file and stuff
