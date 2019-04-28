@@ -4,10 +4,10 @@ find_package(KF5NewStuff ${KF5_DEP_VERSION} REQUIRED) # For KMoreTools
 
 # hacks to make LSP stuff from QtCreator compile
 set(CMAKE_CXX_STANDARD 14)
-remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_FROM_BYTEARRAY -DQT_NO_CAST_TO_ASCII)
+remove_definitions(-DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_FROM_BYTEARRAY -DQT_NO_CAST_TO_ASCII -DQT_NO_SIGNALS_SLOTS_KEYWORDS)
 kde_enable_exceptions()
 
-include_directories( ${CMAKE_CURRENT_BINARY_DIR} libs )
+include_directories( ${CMAKE_CURRENT_BINARY_DIR} lsp )
 
 add_definitions(-DTRANSLATION_DOMAIN=\"kateproject\")
 set(kateprojectplugin_PART_SRCS
@@ -35,34 +35,35 @@ set(kateprojectplugin_PART_SRCS
   tools/kateprojectcodeanalysisselector.cpp
 
   # language server protocol from Qt Creator
-  libs/languageserverprotocol/basemessage.cpp
-  libs/languageserverprotocol/client.cpp
-  libs/languageserverprotocol/diagnostics.cpp
-  libs/languageserverprotocol/jsonobject.cpp
-  libs/languageserverprotocol/languagefeatures.cpp
-  libs/languageserverprotocol/lsputils.cpp
-  libs/languageserverprotocol/servercapabilities.cpp
-  libs/languageserverprotocol/textsynchronization.cpp
-  libs/languageserverprotocol/clientcapabilities.cpp
-  libs/languageserverprotocol/completion.cpp
-  libs/languageserverprotocol/initializemessages.cpp
-  libs/languageserverprotocol/jsonrpcmessages.cpp
-  libs/languageserverprotocol/lsptypes.cpp
-  libs/languageserverprotocol/messages.cpp
-  libs/languageserverprotocol/shutdownmessages.cpp
-  libs/languageserverprotocol/workspace.cpp
-  libs/utils/fileutils.cpp
-  libs/utils/hostosinfo.cpp
-  libs/utils/qtcassert.cpp
-  libs/utils/savefile.cpp
-  libs/utils/textutils.cpp
-  libs/utils/mimetypes/mimedatabase.cpp
-  libs/utils/mimetypes/mimeglobpattern.cpp
-  libs/utils/mimetypes/mimemagicrule.cpp
-  libs/utils/mimetypes/mimemagicrulematcher.cpp
-  libs/utils/mimetypes/mimeprovider.cpp
-  libs/utils/mimetypes/mimetype.cpp
-  libs/utils/mimetypes/mimetypeparser.cpp
+  lsp/languageserverprotocol/basemessage.cpp
+  lsp/languageserverprotocol/client.cpp
+  lsp/languageserverprotocol/diagnostics.cpp
+  lsp/languageserverprotocol/jsonobject.cpp
+  lsp/languageserverprotocol/languagefeatures.cpp
+  lsp/languageserverprotocol/lsputils.cpp
+  lsp/languageserverprotocol/servercapabilities.cpp
+  lsp/languageserverprotocol/textsynchronization.cpp
+  lsp/languageserverprotocol/clientcapabilities.cpp
+  lsp/languageserverprotocol/completion.cpp
+  lsp/languageserverprotocol/initializemessages.cpp
+  lsp/languageserverprotocol/jsonrpcmessages.cpp
+  lsp/languageserverprotocol/lsptypes.cpp
+  lsp/languageserverprotocol/messages.cpp
+  lsp/languageserverprotocol/shutdownmessages.cpp
+  lsp/languageserverprotocol/workspace.cpp
+  lsp/utils/fileutils.cpp
+  lsp/utils/hostosinfo.cpp
+  lsp/utils/qtcassert.cpp
+  lsp/utils/savefile.cpp
+  lsp/utils/textutils.cpp
+  lsp/utils/mimetypes/mimedatabase.cpp
+  lsp/utils/mimetypes/mimeglobpattern.cpp
+  lsp/utils/mimetypes/mimemagicrule.cpp
+  lsp/utils/mimetypes/mimemagicrulematcher.cpp
+  lsp/utils/mimetypes/mimeprovider.cpp
+  lsp/utils/mimetypes/mimetype.cpp
+  lsp/utils/mimetypes/mimetypeparser.cpp
+  lsp/languageclient/languageclientinterface.cpp
 
 )
 
