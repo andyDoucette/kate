@@ -32,8 +32,6 @@
 
 namespace LanguageClient {
 
-class StdIOSettings;
-
 class BaseClientInterface : public QObject
 {
     Q_OBJECT
@@ -73,8 +71,6 @@ public:
     StdIOClientInterface(StdIOClientInterface &&) = delete;
     StdIOClientInterface &operator=(const StdIOClientInterface &) = delete;
     StdIOClientInterface &operator=(StdIOClientInterface &&) = delete;
-
-    bool needsRestart(const StdIOSettings *settings) const;
 
     bool start() override;
 

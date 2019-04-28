@@ -25,8 +25,6 @@
 
 #include "languageclientinterface.h"
 
-#include "languageclientsettings.h"
-
 #include <utils/qtcprocess.h>
 #include <utils/synchronousprocess.h>
 
@@ -108,11 +106,6 @@ StdIOClientInterface::StdIOClientInterface(const QString &executable, const QStr
 StdIOClientInterface::~StdIOClientInterface()
 {
     Utils::SynchronousProcess::stopProcess(m_process);
-}
-
-bool StdIOClientInterface::needsRestart(const StdIOSettings *settings) const
-{
-    return m_executable != settings->m_executable || m_arguments != settings->arguments();
 }
 
 bool StdIOClientInterface::start()

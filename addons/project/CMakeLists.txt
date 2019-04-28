@@ -51,10 +51,14 @@ set(kateprojectplugin_PART_SRCS
   lsp/languageserverprotocol/messages.cpp
   lsp/languageserverprotocol/shutdownmessages.cpp
   lsp/languageserverprotocol/workspace.cpp
+  lsp/utils/environment.cpp
   lsp/utils/fileutils.cpp
   lsp/utils/hostosinfo.cpp
   lsp/utils/qtcassert.cpp
+  lsp/utils/qtcprocess.cpp
   lsp/utils/savefile.cpp
+  lsp/utils/stringutils.cpp
+  lsp/utils/synchronousprocess.cpp
   lsp/utils/textutils.cpp
   lsp/utils/mimetypes/mimedatabase.cpp
   lsp/utils/mimetypes/mimeglobpattern.cpp
