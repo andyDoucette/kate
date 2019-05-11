@@ -26,26 +26,14 @@
 #include "client.h"
 
 #include "languageclientinterface.h"
-#include "languageclientmanager.h"
-#include "languageclientutils.h"
 
-#include <coreplugin/icore.h>
-#include <coreplugin/idocument.h>
-#include <coreplugin/messagemanager.h>
 #include <languageserverprotocol/diagnostics.h>
 #include <languageserverprotocol/languagefeatures.h>
 #include <languageserverprotocol/messages.h>
 #include <languageserverprotocol/workspace.h>
-#include <texteditor/semantichighlighter.h>
-#include <texteditor/textdocument.h>
-#include <texteditor/texteditor.h>
-#include <texteditor/textmark.h>
-#include <projectexplorer/project.h>
-#include <projectexplorer/session.h>
 #include <utils/mimetypes/mimedatabase.h>
 #include <utils/qtcprocess.h>
 #include <utils/synchronousprocess.h>
-#include <utils/utilsicons.h>
 
 #include <QDebug>
 #include <QLoggingCategory>
@@ -64,37 +52,8 @@ namespace LanguageClient {
 
 static Q_LOGGING_CATEGORY(LOGLSPCLIENT, "qtc.languageclient.client", QtWarningMsg);
 
-class TextMark : public TextEditor::TextMark
-{
-public:
-    TextMark(const Utils::FileName &fileName, const Diagnostic &diag)
-        : TextEditor::TextMark(fileName, diag.range().start().line() + 1, "lspmark")
-        , m_diagnostic(diag)
-    {
-        using namespace Utils;
-        setLineAnnotation(diag.message());
-        setToolTip(diag.message());
-        const bool isError
-            = diag.severity().value_or(DiagnosticSeverity::Hint) == DiagnosticSeverity::Error;
-        setColor(isError ? Theme::CodeModel_Error_TextMarkColor
-                         : Theme::CodeModel_Warning_TextMarkColor);
-
-        setIcon(isError ? Icons::CODEMODEL_ERROR.icon()
-                        : Icons::CODEMODEL_WARNING.icon());
-    }
-
-    const Diagnostic &diagnostic() const { return m_diagnostic; }
-
-private:
-    const Diagnostic m_diagnostic;
-};
-
 Client::Client(BaseClientInterface *clientInterface)
-    : m_id(Core::Id::fromString(QUuid::createUuid().toString()))
-    , m_completionProvider(this)
-    , m_quickFixProvider(this)
-    , m_clientInterface(clientInterface)
-    , m_documentSymbolCache(this)
+    : m_clientInterface(clientInterface)
 {
     m_contentHandler.insert(JsonRpcMessageHandler::jsonRpcMimeType(),
                             &JsonRpcMessageHandler::parseContent);
@@ -104,6 +63,216 @@ Client::Client(BaseClientInterface *clientInterface)
     connect(clientInterface, &BaseClientInterface::finished, this, &Client::finished);
 }
 
+Client::~Client()
+{
+}
+
+
+bool Client::start()
+{
+    return m_clientInterface->start();
+}
+
+
+void Client::initialize()
+{
+    QTC_ASSERT(m_clientInterface, return);
+    QTC_ASSERT(m_state == Uninitialized, return);
+    qCDebug(LOGLSPCLIENT) << "initializing language server " << m_displayName;
+    auto initRequest = new InitializeRequest();
+    initRequest->setResponseCallback([this](const InitializeRequest::Response &initResponse){
+        intializeCallback(initResponse);
+    });
+    // directly send data otherwise the state check would fail;
+    initRequest->registerResponseHandler(&m_responseHandlers);
+    m_clientInterface->sendMessage(initRequest->toBaseMessage());
+    m_state = InitializeRequested;
+}
+
+void Client::intializeCallback(const InitializeRequest::Response &initResponse)
+{
+    QTC_ASSERT(m_state == InitializeRequested, return);
+    if (optional<ResponseError<InitializeError>> error = initResponse.error()) {
+        if (error.value().data().has_value()
+                && error.value().data().value().retry().value_or(false)) {
+            const QString title(tr("Language Server \"%1\" Initialize Error").arg(m_displayName));
+            auto result = QMessageBox::warning(nullptr,
+                                               title,
+                                               error.value().message(),
+                                               QMessageBox::Retry | QMessageBox::Cancel,
+                                               QMessageBox::Retry);
+            if (result == QMessageBox::Retry) {
+                m_state = Uninitialized;
+                initialize();
+                return;
+            }
+        }
+        setError(tr("Initialize error: ") + error.value().message());
+        emit finished();
+        return;
+    }
+    const optional<InitializeResult> &_result = initResponse.result();
+    if (!_result.has_value()) {// continue on ill formed result
+        log(tr("No initialize result."));
+    } else {
+        const InitializeResult &result = _result.value();
+        QStringList error;
+        if (!result.isValid(&error)) // continue on ill formed result
+            log(tr("Initialize result is not valid: ") + error.join("->"));
+
+        m_serverCapabilities = result.capabilities().value_or(ServerCapabilities());
+    }
+    qCDebug(LOGLSPCLIENT) << "language server " << m_displayName << " initialized";
+    m_state = Initialized;
+    sendContent(InitializeNotification());
+    emit initialized(m_serverCapabilities);
+}
+
+void Client::setError(const QString &message)
+{
+    log(message);
+    m_state = Error;
+}
+
+void Client::handleMessage(const BaseMessage &message)
+{
+    if (auto handler = m_contentHandler[message.mimeType]) {
+        QString parseError;
+        handler(message.content, message.codec, parseError,
+                [this](MessageId id, const QByteArray &content, QTextCodec *codec){
+                    this->handleResponse(id, content, codec);
+                },
+                [this](const QString &method, MessageId id, const IContent *content){
+                    this->handleMethod(method, id, content);
+                });
+        if (!parseError.isEmpty())
+            log(parseError);
+    } else {
+        log(tr("Cannot handle content of type: %1").arg(QLatin1String(message.mimeType)));
+    }
+}
+
+void Client::log(const QString &messag)
+{
+   qDebug() << messag;
+}
+
+void Client::sendContent(const IContent &content)
+{
+    QTC_ASSERT(m_clientInterface, return);
+    QTC_ASSERT(m_state == Initialized, return);
+    content.registerResponseHandler(&m_responseHandlers);
+    QString error;
+    if (!QTC_GUARD(content.isValid(&error)))
+        qDebug() << error;
+    m_clientInterface->sendMessage(content.toBaseMessage());
+}
+
+void Client::sendContent(const DocumentUri &uri, const IContent &content)
+{
+//    if (!m_openedDocument.contains(uri.toFileName()))
+  //      return;
+    sendContent(content);
+}
+
+void Client::cancelRequest(const MessageId &id)
+{
+    m_responseHandlers.remove(id);
+    sendContent(CancelRequest(CancelParameter(id)));
+}
+
+void Client::handleResponse(const MessageId &id, const QByteArray &content, QTextCodec *codec)
+{
+    if (auto handler = m_responseHandlers[id])
+        handler(content, codec);
+}
+
+void Client::handleMethod(const QString &method, MessageId id, const IContent *content)
+{
+#if 0
+    QStringList error;
+    bool paramsValid = true;
+    if (method == PublishDiagnosticsNotification::methodName) {
+        auto params = dynamic_cast<const PublishDiagnosticsNotification *>(content)->params().value_or(PublishDiagnosticsParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid)
+            handleDiagnostics(params);
+    } else if (method == LogMessageNotification::methodName) {
+        auto params = dynamic_cast<const LogMessageNotification *>(content)->params().value_or(LogMessageParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid)
+            log(params, Core::MessageManager::Flash);
+    } else if (method == ShowMessageNotification::methodName) {
+        auto params = dynamic_cast<const ShowMessageNotification *>(content)->params().value_or(ShowMessageParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid)
+            log(params);
+    } else if (method == ShowMessageRequest::methodName) {
+        auto request = dynamic_cast<const ShowMessageRequest *>(content);
+        auto params = request->params().value_or(ShowMessageRequestParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid) {
+            showMessageBox(params, request->id());
+        } else {
+            ShowMessageRequest::Response response(request->id());
+            ResponseError<std::nullptr_t> error;
+            const QString errorMessage =
+                    QString("Could not parse ShowMessageRequest parameter of '%1': \"%2\"")
+                    .arg(request->id().toString(),
+                         QString::fromUtf8(QJsonDocument(params).toJson()));
+            error.setMessage(errorMessage);
+            response.setError(error);
+            sendContent(response);
+        }
+    } else if (method == RegisterCapabilityRequest::methodName) {
+        auto params = dynamic_cast<const RegisterCapabilityRequest *>(content)->params().value_or(RegistrationParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid)
+            m_dynamicCapabilities.registerCapability(params.registrations());
+    } else if (method == UnregisterCapabilityRequest::methodName) {
+        auto params = dynamic_cast<const UnregisterCapabilityRequest *>(content)->params().value_or(UnregistrationParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid)
+            m_dynamicCapabilities.unregisterCapability(params.unregistrations());
+    } else if (method == ApplyWorkspaceEditRequest::methodName) {
+        auto params = dynamic_cast<const ApplyWorkspaceEditRequest *>(content)->params().value_or(ApplyWorkspaceEditParams());
+        paramsValid = params.isValid(&error);
+        if (paramsValid)
+            applyWorkspaceEdit(params.edit());
+    } else if (method == WorkSpaceFolderRequest::methodName) {
+        WorkSpaceFolderRequest::Response response(dynamic_cast<const WorkSpaceFolderRequest *>(content)->id());
+        const QList<ProjectExplorer::Project *> projects
+            = ProjectExplorer::SessionManager::projects();
+        WorkSpaceFolderResult result;
+        if (projects.isEmpty()) {
+            result = nullptr;
+        } else {
+            result = Utils::transform(projects, [](ProjectExplorer::Project *project) {
+                return WorkSpaceFolder(project->projectDirectory().toString(),
+                                       project->displayName());
+            });
+        }
+        response.setResult(result);
+        sendContent(response);
+    } else if (id.isValid(&error)) {
+        Response<JsonObject, JsonObject> response(id);
+        ResponseError<JsonObject> error;
+        error.setCode(ResponseError<JsonObject>::MethodNotFound);
+        response.setError(error);
+        sendContent(response);
+    }
+    std::reverse(error.begin(), error.end());
+    if (!paramsValid) {
+        log(tr("Invalid parameter in \"%1\": %2").arg(method, error.join("->")),
+            Core::MessageManager::Flash);
+    }
+    delete content;
+
+#endif
+}
+
+#if 0
+
 static void updateEditorToolBar(QList<Utils::FileName> files)
 {
     QList<Core::IEditor *> editors = Core::DocumentModel::editorsForDocuments(
@@ -112,26 +281,6 @@ static void updateEditorToolBar(QList<Utils::FileName> files)
         }));
     for (auto editor : editors)
         updateEditorToolBar(editor);
-}
-
-Client::~Client()
-{
-    using namespace TextEditor;
-    // FIXME: instead of replacing the completion provider in the text document store the
-    // completion provider as a prioritised list in the text document
-    for (TextDocument *document : m_resetAssistProvider) {
-        document->setCompletionAssistProvider(nullptr);
-        document->setQuickFixAssistProvider(nullptr);
-    }
-    for (Core::IEditor * editor : Core::DocumentModel::editorsForOpenedDocuments()) {
-        if (auto textEditor = qobject_cast<BaseTextEditor *>(editor)) {
-            TextEditorWidget *widget = textEditor->editorWidget();
-            widget->setRefactorMarkers(RefactorMarker::filterOutType(widget->refactorMarkers(), id()));
-        }
-    }
-    for (const DocumentUri &uri : m_diagnostics.keys())
-        removeDiagnostics(uri);
-    updateEditorToolBar(m_openedDocument);
 }
 
 static ClientCapabilities generateClientCapabilities()
@@ -208,32 +357,6 @@ static ClientCapabilities generateClientCapabilities()
     return capabilities;
 }
 
-void Client::initialize()
-{
-    using namespace ProjectExplorer;
-    QTC_ASSERT(m_clientInterface, return);
-    QTC_ASSERT(m_state == Uninitialized, return);
-    qCDebug(LOGLSPCLIENT) << "initializing language server " << m_displayName;
-    auto initRequest = new InitializeRequest();
-    if (auto startupProject = SessionManager::startupProject()) {
-        auto params = initRequest->params().value_or(InitializeParams());
-        params.setCapabilities(generateClientCapabilities());
-        params.setRootUri(DocumentUri::fromFileName(startupProject->projectDirectory()));
-        initRequest->setParams(params);
-        params.setWorkSpaceFolders(Utils::transform(SessionManager::projects(), [](Project *pro){
-            return WorkSpaceFolder(pro->projectDirectory().toString(), pro->displayName());
-        }));
-        initRequest->setParams(params);
-    }
-    initRequest->setResponseCallback([this](const InitializeRequest::Response &initResponse){
-        intializeCallback(initResponse);
-    });
-    // directly send data otherwise the state check would fail;
-    initRequest->registerResponseHandler(&m_responseHandlers);
-    m_clientInterface->sendMessage(initRequest->toBaseMessage());
-    m_state = InitializeRequested;
-}
-
 void Client::shutdown()
 {
     QTC_ASSERT(m_state == Initialized, emit finished(); return);
@@ -308,30 +431,6 @@ bool Client::openDocument(Core::IDocument *document)
         requestDocumentSymbols(textDocument);
 
     return true;
-}
-
-void Client::sendContent(const IContent &content)
-{
-    QTC_ASSERT(m_clientInterface, return);
-    QTC_ASSERT(m_state == Initialized, return);
-    content.registerResponseHandler(&m_responseHandlers);
-    QString error;
-    if (!QTC_GUARD(content.isValid(&error)))
-        Core::MessageManager::write(error);
-    m_clientInterface->sendMessage(content.toBaseMessage());
-}
-
-void Client::sendContent(const DocumentUri &uri, const IContent &content)
-{
-    if (!m_openedDocument.contains(uri.toFileName()))
-        return;
-    sendContent(content);
-}
-
-void Client::cancelRequest(const MessageId &id)
-{
-    m_responseHandlers.remove(id);
-    sendContent(CancelRequest(CancelParameter(id)));
 }
 
 void Client::closeDocument(const DidCloseTextDocumentParams &params)
@@ -794,11 +893,6 @@ QList<Diagnostic> Client::diagnosticsAt(const DocumentUri &uri, const Range &ran
     return diagnostics;
 }
 
-bool Client::start()
-{
-    return m_clientInterface->start();
-}
-
 bool Client::reset()
 {
     if (!m_restartsLeft)
@@ -814,35 +908,6 @@ bool Client::reset()
     for (const DocumentUri &uri : m_diagnostics.keys())
         removeDiagnostics(uri);
     return true;
-}
-
-void Client::setError(const QString &message)
-{
-    log(message);
-    m_state = Error;
-}
-
-void Client::handleMessage(const BaseMessage &message)
-{
-    if (auto handler = m_contentHandler[message.mimeType]) {
-        QString parseError;
-        handler(message.content, message.codec, parseError,
-                [this](MessageId id, const QByteArray &content, QTextCodec *codec){
-                    this->handleResponse(id, content, codec);
-                },
-                [this](const QString &method, MessageId id, const IContent *content){
-                    this->handleMethod(method, id, content);
-                });
-        if (!parseError.isEmpty())
-            log(parseError);
-    } else {
-        log(tr("Cannot handle content of type: %1").arg(QLatin1String(message.mimeType)));
-    }
-}
-
-void Client::log(const QString &message, Core::MessageManager::PrintToOutputPaneFlag flag)
-{
-    Core::MessageManager::write(QString("LanguageClient %1: %2").arg(name(), message), flag);
 }
 
 const ServerCapabilities &Client::capabilities() const
@@ -917,12 +982,6 @@ void Client::removeDiagnostics(const DocumentUri &uri)
             doc->removeMark(mark);
         delete mark;
     }
-}
-
-void Client::handleResponse(const MessageId &id, const QByteArray &content, QTextCodec *codec)
-{
-    if (auto handler = m_responseHandlers[id])
-        handler(content, codec);
 }
 
 void Client::handleMethod(const QString &method, MessageId id, const IContent *content)
@@ -1021,51 +1080,6 @@ void Client::handleDiagnostics(const PublishDiagnosticsParams &params)
     requestCodeActions(uri, diagnostics);
 }
 
-void Client::intializeCallback(const InitializeRequest::Response &initResponse)
-{
-    QTC_ASSERT(m_state == InitializeRequested, return);
-    if (optional<ResponseError<InitializeError>> error = initResponse.error()) {
-        if (error.value().data().has_value()
-                && error.value().data().value().retry().value_or(false)) {
-            const QString title(tr("Language Server \"%1\" Initialize Error").arg(m_displayName));
-            auto result = QMessageBox::warning(Core::ICore::dialogParent(),
-                                               title,
-                                               error.value().message(),
-                                               QMessageBox::Retry | QMessageBox::Cancel,
-                                               QMessageBox::Retry);
-            if (result == QMessageBox::Retry) {
-                m_state = Uninitialized;
-                initialize();
-                return;
-            }
-        }
-        setError(tr("Initialize error: ") + error.value().message());
-        emit finished();
-        return;
-    }
-    const optional<InitializeResult> &_result = initResponse.result();
-    if (!_result.has_value()) {// continue on ill formed result
-        log(tr("No initialize result."));
-    } else {
-        const InitializeResult &result = _result.value();
-        QStringList error;
-        if (!result.isValid(&error)) // continue on ill formed result
-            log(tr("Initialize result is not valid: ") + error.join("->"));
-
-        m_serverCapabilities = result.capabilities().value_or(ServerCapabilities());
-    }
-    qCDebug(LOGLSPCLIENT) << "language server " << m_displayName << " initialized";
-    m_state = Initialized;
-    sendContent(InitializeNotification());
-    emit initialized(m_serverCapabilities);
-    for (auto openedDocument : Core::DocumentModel::openedDocuments()) {
-        if (openDocument(openedDocument)) {
-            for (Core::IEditor *editor : Core::DocumentModel::editorsForDocument(openedDocument))
-                updateEditorToolBar(editor);
-        }
-    }
-}
-
 void Client::shutDownCallback(const ShutdownRequest::Response &shutdownResponse)
 {
     QTC_ASSERT(m_state == ShutdownRequested, return);
@@ -1100,5 +1114,6 @@ bool Client::sendWorkspceFolderChanges() const
     }
     return false;
 }
+#endif
 
 } // namespace LanguageClient

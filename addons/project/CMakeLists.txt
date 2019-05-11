@@ -68,6 +68,7 @@ set(kateprojectplugin_PART_SRCS
   lsp/utils/mimetypes/mimetype.cpp
   lsp/utils/mimetypes/mimetypeparser.cpp
   lsp/languageclient/languageclientinterface.cpp
+  lsp/languageclient/client.cpp
 
 )
 
