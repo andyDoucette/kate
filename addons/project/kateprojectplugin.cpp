@@ -37,6 +37,8 @@
 
 #include "config.h"
 
+#include "lsp/languageclient/languageclientinterface.h"
+
 #ifdef HAVE_CTERMID
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -94,6 +96,10 @@ KateProjectPlugin::KateProjectPlugin(QObject *parent, const QList<QVariant> &)
     for (auto document : KTextEditor::Editor::instance()->application()->documents()) {
         slotDocumentCreated(document);
     }
+
+    // start language client
+    LanguageClient::StdIOClientInterface *test = new LanguageClient::StdIOClientInterface (QStringLiteral("clangd"), QString());
+    test->start();
 }
 
 KateProjectPlugin::~KateProjectPlugin()
