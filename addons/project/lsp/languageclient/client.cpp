@@ -50,7 +50,7 @@ using namespace Utils;
 
 namespace LanguageClient {
 
-static Q_LOGGING_CATEGORY(LOGLSPCLIENT, "qtc.languageclient.client", QtWarningMsg);
+static Q_LOGGING_CATEGORY(LOGLSPCLIENT, "qtc.languageclient.client", QtDebugMsg);
 
 Client::Client(BaseClientInterface *clientInterface)
     : m_clientInterface(clientInterface)

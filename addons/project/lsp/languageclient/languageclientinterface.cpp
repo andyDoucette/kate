@@ -32,8 +32,8 @@
 
 using namespace LanguageServerProtocol;
 
-static Q_LOGGING_CATEGORY(LOGLSPCLIENTV, "qtc.languageclient.messages", QtWarningMsg);
-static Q_LOGGING_CATEGORY(LOGLSPCLIENTPARSE, "qtc.languageclient.parse", QtWarningMsg);
+static Q_LOGGING_CATEGORY(LOGLSPCLIENTV, "qtc.languageclient.messages", QtDebugMsg);
+static Q_LOGGING_CATEGORY(LOGLSPCLIENTPARSE, "qtc.languageclient.parse", QtDebugMsg);
 
 namespace LanguageClient {
 
