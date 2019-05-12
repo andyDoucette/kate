@@ -19,3 +19,21 @@ build
 
 # from dolphin
 .directory
+
+# Ignoring all of the files that "cmake ." creates:
+*.cmake
+*.depends
+CMakeFiles
+Makefile
+CMakeCache.txt
+addons/close-except-like/config.h
+addons/kate-ctags/kate_ctags_debug.cpp
+addons/kate-ctags/kate_ctags_debug.h
+addons/prefix.sh
+addons/preview/ktexteditorpreview_debug.cpp
+addons/preview/ktexteditorpreview_debug.h
+addons/sessionapplet/org.kde.plasma.katesessions.appdata.xml
+addons/sessionapplet/regenerateindex.sh
+config.h
+kate/kateprivate_export.h
+prefix.sh
