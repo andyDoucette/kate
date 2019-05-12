@@ -44,7 +44,6 @@
 #include <QToolTip>
 #include <QWhatsThis>
 
-//BEGIN KateViewSpace
 KateViewSpace::KateViewSpace(KateViewManager *viewManager,
                              QWidget *parent, const char *name)
     : QWidget(parent)
@@ -410,7 +409,7 @@ void KateViewSpace::addTabs(int count)
 {
     const int start = count;
 
-    /// @p count tabs still fit into the tab bar: add as man as possible
+    /// @p count tabs still fit into the tab bar: add as many as possible
     while (count > 0) {
         const int tabCount = m_tabBar->count();
         if (m_lruDocList.size() <= tabCount) {
@@ -740,4 +739,3 @@ void KateViewSpace::restoreConfig(KateViewManager *viewMan, const KConfigBase *c
 
     m_group = groupname; // used for restroing view configs later
 }
-//END KateViewSpace
