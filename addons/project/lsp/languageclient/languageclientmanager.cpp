@@ -57,7 +57,8 @@ LanguageClientManager::LanguageClientManager(KateProjectPlugin *parent)
 
 LanguageClientManager::~LanguageClientManager()
 {
-    QTC_ASSERT(m_clients.isEmpty(), qDeleteAll(m_clients));
+    // FIXME: atm we just delete all clients, we shall do proper shutdown sequence
+    //qDeleteAll(m_clients);
 }
 
 void LanguageClientManager::startClient(Client *client)
