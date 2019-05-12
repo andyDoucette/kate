@@ -27,6 +27,9 @@
 
 #include "languageclientinterface.h"
 
+#include "kateprojectplugin.h"
+#include "kateproject.h"
+
 #include <languageserverprotocol/diagnostics.h>
 #include <languageserverprotocol/languagefeatures.h>
 #include <languageserverprotocol/messages.h>
@@ -52,8 +55,9 @@ namespace LanguageClient {
 
 static Q_LOGGING_CATEGORY(LOGLSPCLIENT, "qtc.languageclient.client", QtDebugMsg);
 
-Client::Client(BaseClientInterface *clientInterface)
-    : m_clientInterface(clientInterface)
+Client::Client(KateProjectPlugin *parent, BaseClientInterface *clientInterface)
+    :  m_projectPlugin(parent)
+    , m_clientInterface(clientInterface)
 {
     m_contentHandler.insert(JsonRpcMessageHandler::jsonRpcMimeType(),
                             &JsonRpcMessageHandler::parseContent);
@@ -86,12 +90,104 @@ bool Client::reset()
 }
 
 
+static ClientCapabilities generateClientCapabilities()
+{
+    ClientCapabilities capabilities;
+    WorkspaceClientCapabilities workspaceCapabilities;
+    workspaceCapabilities.setWorkspaceFolders(true);
+    workspaceCapabilities.setApplyEdit(true);
+    DynamicRegistrationCapabilities allowDynamicRegistration;
+    allowDynamicRegistration.setDynamicRegistration(true);
+    workspaceCapabilities.setDidChangeConfiguration(allowDynamicRegistration);
+    workspaceCapabilities.setExecuteCommand(allowDynamicRegistration);
+    capabilities.setWorkspace(workspaceCapabilities);
+
+    TextDocumentClientCapabilities documentCapabilities;
+    TextDocumentClientCapabilities::SynchronizationCapabilities syncCapabilities;
+    syncCapabilities.setDynamicRegistration(true);
+    syncCapabilities.setWillSave(true);
+    syncCapabilities.setWillSaveWaitUntil(false);
+    syncCapabilities.setDidSave(true);
+    documentCapabilities.setSynchronization(syncCapabilities);
+
+    SymbolCapabilities symbolCapabilities;
+    SymbolCapabilities::SymbolKindCapabilities symbolKindCapabilities;
+    symbolKindCapabilities.setValueSet(
+        {SymbolKind::File,       SymbolKind::Module,       SymbolKind::Namespace,
+         SymbolKind::Package,    SymbolKind::Class,        SymbolKind::Method,
+         SymbolKind::Property,   SymbolKind::Field,        SymbolKind::Constructor,
+         SymbolKind::Enum,       SymbolKind::Interface,    SymbolKind::Function,
+         SymbolKind::Variable,   SymbolKind::Constant,     SymbolKind::String,
+         SymbolKind::Number,     SymbolKind::Boolean,      SymbolKind::Array,
+         SymbolKind::Object,     SymbolKind::Key,          SymbolKind::Null,
+         SymbolKind::EnumMember, SymbolKind::Struct,       SymbolKind::Event,
+         SymbolKind::Operator,   SymbolKind::TypeParameter});
+    symbolCapabilities.setSymbolKind(symbolKindCapabilities);
+    documentCapabilities.setDocumentSymbol(symbolCapabilities);
+
+    TextDocumentClientCapabilities::CompletionCapabilities completionCapabilities;
+    completionCapabilities.setDynamicRegistration(true);
+    TextDocumentClientCapabilities::CompletionCapabilities::CompletionItemKindCapabilities
+        completionItemKindCapabilities;
+    completionItemKindCapabilities.setValueSet(
+        {CompletionItemKind::Text,         CompletionItemKind::Method,
+         CompletionItemKind::Function,     CompletionItemKind::Constructor,
+         CompletionItemKind::Field,        CompletionItemKind::Variable,
+         CompletionItemKind::Class,        CompletionItemKind::Interface,
+         CompletionItemKind::Module,       CompletionItemKind::Property,
+         CompletionItemKind::Unit,         CompletionItemKind::Value,
+         CompletionItemKind::Enum,         CompletionItemKind::Keyword,
+         CompletionItemKind::Snippet,      CompletionItemKind::Color,
+         CompletionItemKind::File,         CompletionItemKind::Reference,
+         CompletionItemKind::Folder,       CompletionItemKind::EnumMember,
+         CompletionItemKind::Constant,     CompletionItemKind::Struct,
+         CompletionItemKind::Event,        CompletionItemKind::Operator,
+         CompletionItemKind::TypeParameter});
+
+    completionCapabilities.setCompletionItemKind(completionItemKindCapabilities);
+    documentCapabilities.setCompletion(completionCapabilities);
+
+    TextDocumentClientCapabilities::CodeActionCapabilities codeActionCapabilities;
+    TextDocumentClientCapabilities::CodeActionCapabilities::CodeActionLiteralSupport literalSupport;
+    literalSupport.setCodeActionKind(
+        TextDocumentClientCapabilities::CodeActionCapabilities::CodeActionLiteralSupport::
+            CodeActionKind(QList<QString>{"*"}));
+    codeActionCapabilities.setCodeActionLiteralSupport(literalSupport);
+    documentCapabilities.setCodeAction(codeActionCapabilities);
+    documentCapabilities.setReferences(allowDynamicRegistration);
+    documentCapabilities.setDocumentHighlight(allowDynamicRegistration);
+    documentCapabilities.setDefinition(allowDynamicRegistration);
+    documentCapabilities.setTypeDefinition(allowDynamicRegistration);
+    documentCapabilities.setImplementation(allowDynamicRegistration);
+    capabilities.setTextDocument(documentCapabilities);
+
+    return capabilities;
+}
+
 void Client::initialize()
 {
     QTC_ASSERT(m_clientInterface, return);
     QTC_ASSERT(m_state == Uninitialized, return);
     qCDebug(LOGLSPCLIENT) << "initializing language server " << m_displayName;
     auto initRequest = new InitializeRequest();
+
+    // we shall arrive here not before we have some projects around to ensure we have some initial root
+    auto projects = m_projectPlugin->projects();
+    Q_ASSERT(!projects.isEmpty());
+
+    auto params = initRequest->params().value_or(InitializeParams());
+    params.setCapabilities(generateClientCapabilities());
+    params.setRootUri(DocumentUri::fromFileName(Utils::FileName::fromString(QFileInfo(QFileInfo(projects.at(0)->fileName()).path()).canonicalFilePath())));
+    initRequest->setParams(params);
+
+    QList<WorkSpaceFolder> folders;
+    for (auto project : projects) {
+        folders.push_back(WorkSpaceFolder(QUrl::fromLocalFile(QFileInfo(QFileInfo(project->fileName()).path()).canonicalFilePath()).toString(), project->name()));
+        folders.push_back(WorkSpaceFolder(QUrl::fromLocalFile(QFileInfo(project->baseDir()).canonicalFilePath()).toString(), project->name()));
+    }
+    params.setWorkSpaceFolders(folders);
+    initRequest->setParams(params);
+
     initRequest->setResponseCallback([this](const InitializeRequest::Response &initResponse){
         intializeCallback(initResponse);
     });

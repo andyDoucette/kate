@@ -27,6 +27,8 @@
 #include "client.h"
 #include "languageclientinterface.h"
 
+#include "kateprojectplugin.h"
+
 #include <languageserverprotocol/messages.h>
 #include <languageserverprotocol/workspace.h>
 #include <utils/mimetypes/mimedatabase.h>
@@ -49,10 +51,29 @@ LanguageClientManager::LanguageClientManager(KateProjectPlugin *parent)
     JsonRpcMessageHandler::registerMessageProvider<WorkSpaceFolderRequest>();
 
     /**
+     * we watch for new projects
+     * first project creation will trigger client starting
+     */
+    connect(m_projectPlugin, &KateProjectPlugin::projectCreated, this, &LanguageClientManager::projectCreated);
+}
+
+bool LanguageClientManager::initClients()
+{
+    // do this once
+    if (m_clientsInited)
+        return false;
+    m_clientsInited = true;
+
+    // we shall arrive here not before we have some projects around to ensure we have some initial root
+    Q_ASSERT(!m_projectPlugin->projects().isEmpty());
+
+    /**
      * start some clients, later make this configurable
      */
-    startClient(new LanguageClient::Client (new LanguageClient::StdIOClientInterface (QStringLiteral("clangd"), QString())));
+    startClient(new LanguageClient::Client (m_projectPlugin, new LanguageClient::StdIOClientInterface (QStringLiteral("clangd"), QString())));
     // ccls needs initial rootUri, bad startClient(new LanguageClient::Client (new LanguageClient::StdIOClientInterface (QStringLiteral("ccls"), QString())));
+
+    return true;
 }
 
 LanguageClientManager::~LanguageClientManager()
@@ -385,5 +406,12 @@ void LanguageClientManager::projectRemoved(ProjectExplorer::Project *project)
 }
 
 #endif
+
+void LanguageClientManager::projectCreated(KateProject *project)
+{
+    // init LSP clients if not already done, that will take care of the new project, too, if successful
+    if (initClients())
+        return;
+}
 
 } // namespace LanguageClient

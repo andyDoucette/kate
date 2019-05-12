@@ -39,6 +39,8 @@
 #include <QJsonDocument>
 #include <QTextCursor>
 
+class KateProjectPlugin;
+
 namespace LanguageClient {
 
 class BaseClientInterface;
@@ -48,7 +50,7 @@ class Client : public QObject
     Q_OBJECT
 
 public:
-    explicit Client(BaseClientInterface *clientInterface); // takes ownership
+    explicit Client(KateProjectPlugin *parent, BaseClientInterface *clientInterface); // takes ownership
      ~Client() override;
 
     Client(const Client &) = delete;
@@ -170,6 +172,11 @@ private:
     QMap<LanguageServerProtocol::DocumentUri, QList<TextMark *>> m_diagnostics;
     DocumentSymbolCache m_documentSymbolCache;
 #endif
+    /**
+     * the project plugin we belong to
+     * allows access to signals for project management
+     */
+    KateProjectPlugin * const m_projectPlugin = nullptr;
     int m_restartsLeft = 5;
     QString m_displayName;
     QHash<LanguageServerProtocol::MessageId, LanguageServerProtocol::ResponseHandler> m_responseHandlers;

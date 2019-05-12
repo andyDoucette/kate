@@ -31,6 +31,8 @@
 #include <languageserverprotocol/languagefeatures.h>
 #include <languageserverprotocol/textsynchronization.h>
 
+#include "kateproject.h"
+
 class KateProjectPlugin;
 
 namespace LanguageClient {
@@ -66,7 +68,16 @@ public:
 signals:
     void shutdownFinished();
 
+private Q_SLOTS:
+    /**
+     * A new project got created.
+     * @param project new created project
+     */
+    void projectCreated(KateProject *project);
+
 private:
+
+    bool initClients();
 
 #if 0
     void editorOpened(Core::IEditor *editor);
@@ -87,6 +98,11 @@ private:
      * allows access to signals for project management
      */
     KateProjectPlugin * const m_projectPlugin = nullptr;
+
+    /**
+     * clients inited?
+     */
+    bool m_clientsInited = false;
 
     QVector<Client *> reachableClients();
     void sendToAllReachableServers(const LanguageServerProtocol::IContent &content);
