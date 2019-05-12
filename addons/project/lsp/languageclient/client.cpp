@@ -412,6 +412,119 @@ void Client::handleMethod(const QString &method, MessageId id, const IContent *c
 #endif
 }
 
+template <typename Request>
+static bool sendTextDocumentPositionParamsRequest(Client *client,
+                                                  const Request &request,
+                                                  const DynamicCapabilities &dynamicCapabilities,
+                                                  const optional<bool> &serverCapability)
+{
+    if (!request.isValid(nullptr))
+        return false;
+    const DocumentUri uri = request.params().value().textDocument().uri();
+    const bool supportedFile = client->isSupportedUri(uri);
+    bool sendMessage = dynamicCapabilities.isRegistered(Request::methodName).value_or(false);
+    if (sendMessage) {
+        const TextDocumentRegistrationOptions option(dynamicCapabilities.option(Request::methodName));
+        if (option.isValid(nullptr))
+            sendMessage = option.filterApplies(FileName::fromString(QUrl(uri).adjusted(QUrl::PreferLocalFile).toString()));
+        else
+            sendMessage = supportedFile;
+    } else {
+        sendMessage = serverCapability.value_or(sendMessage) && supportedFile;
+    }
+    if (sendMessage)
+        client->sendContent(request);
+    return sendMessage;
+}
+
+bool Client::findLinkAt(GotoDefinitionRequest &request)
+{
+    return LanguageClient::sendTextDocumentPositionParamsRequest(
+                this, request, m_dynamicCapabilities, m_serverCapabilities.definitionProvider());
+}
+
+bool Client::isSupportedUri(const DocumentUri &uri) const
+{
+    // FIXME
+    return true; //m_languagFilter.isSupported(uri.toFileName(),
+                   //                    Utils::mimeTypeForFile(uri.toFileName().fileName()).name());
+}
+
+bool Client::openDocument(KTextEditor::Document *document)
+{
+
+#if 0
+    using namespace TextEditor;
+    if (!isSupportedDocument(document))
+        return false;
+    const FileName &filePath = document->filePath();
+    const QString method(DidOpenTextDocumentNotification::methodName);
+    if (Utils::optional<bool> registered = m_dynamicCapabilities.isRegistered(method)) {
+        if (!registered.value())
+            return false;
+        const TextDocumentRegistrationOptions option(
+                    m_dynamicCapabilities.option(method).toObject());
+        if (option.isValid(nullptr)
+                && !option.filterApplies(filePath, Utils::mimeTypeForName(document->mimeType()))) {
+            return false;
+        }
+    } else if (Utils::optional<ServerCapabilities::TextDocumentSync> _sync
+               = m_serverCapabilities.textDocumentSync()) {
+        if (auto options = Utils::get_if<TextDocumentSyncOptions>(&_sync.value())) {
+            if (!options->openClose().value_or(true))
+                return false;
+        }
+    }
+    auto uri = DocumentUri::fromFileName(filePath);
+    showDiagnostics(uri);
+    auto textDocument = qobject_cast<TextDocument *>(document);
+    TextDocumentItem item;
+    item.setLanguageId(TextDocumentItem::mimeTypeToLanguageId(document->mimeType()));
+    item.setUri(uri);
+    item.setText(QString::fromUtf8(document->contents()));
+    item.setVersion(textDocument ? textDocument->document()->revision() : 0);
+
+    connect(document, &Core::IDocument::contentsChanged, this,
+            [this, document](){
+        documentContentsChanged(document);
+    });
+    if (textDocument) {
+        textDocument->completionAssistProvider();
+        m_resetAssistProvider << textDocument;
+        m_completionProvider.setTriggerCharacters(
+            m_serverCapabilities.completionProvider()
+                .value_or(ServerCapabilities::CompletionOptions())
+                .triggerCharacters()
+                .value_or(QList<QString>()));
+        textDocument->setCompletionAssistProvider(&m_completionProvider);
+        textDocument->setQuickFixAssistProvider(&m_quickFixProvider);
+        connect(textDocument, &QObject::destroyed, this, [this, textDocument]{
+            m_resetAssistProvider.remove(textDocument);
+        });
+    }
+
+    m_openedDocument.append(document->filePath());
+    sendContent(DidOpenTextDocumentNotification(DidOpenTextDocumentParams(item)));
+    if (textDocument)
+        requestDocumentSymbols(textDocument);
+
+#endif
+
+    TextDocumentItem item;
+    item.setLanguageId(TextDocumentItem::mimeTypeToLanguageId(QStringLiteral("C++")));
+    item.setUri(DocumentUri::fromProtocol(document->url().toString()));
+    item.setText(document->text());
+    item.setVersion(0);
+    sendContent(DidOpenTextDocumentNotification(DidOpenTextDocumentParams(item)));
+
+    return true;
+}
+
+void Client::closeDocument(const DidCloseTextDocumentParams &params)
+{
+    sendContent(params.textDocument().uri(), DidCloseTextDocumentNotification(params));
+}
+
 #if 0
 
 static void updateEditorToolBar(QList<Utils::FileName> files)
@@ -496,70 +609,6 @@ static ClientCapabilities generateClientCapabilities()
     capabilities.setTextDocument(documentCapabilities);
 
     return capabilities;
-}
-
-bool Client::openDocument(Core::IDocument *document)
-{
-    using namespace TextEditor;
-    if (!isSupportedDocument(document))
-        return false;
-    const FileName &filePath = document->filePath();
-    const QString method(DidOpenTextDocumentNotification::methodName);
-    if (Utils::optional<bool> registered = m_dynamicCapabilities.isRegistered(method)) {
-        if (!registered.value())
-            return false;
-        const TextDocumentRegistrationOptions option(
-                    m_dynamicCapabilities.option(method).toObject());
-        if (option.isValid(nullptr)
-                && !option.filterApplies(filePath, Utils::mimeTypeForName(document->mimeType()))) {
-            return false;
-        }
-    } else if (Utils::optional<ServerCapabilities::TextDocumentSync> _sync
-               = m_serverCapabilities.textDocumentSync()) {
-        if (auto options = Utils::get_if<TextDocumentSyncOptions>(&_sync.value())) {
-            if (!options->openClose().value_or(true))
-                return false;
-        }
-    }
-    auto uri = DocumentUri::fromFileName(filePath);
-    showDiagnostics(uri);
-    auto textDocument = qobject_cast<TextDocument *>(document);
-    TextDocumentItem item;
-    item.setLanguageId(TextDocumentItem::mimeTypeToLanguageId(document->mimeType()));
-    item.setUri(uri);
-    item.setText(QString::fromUtf8(document->contents()));
-    item.setVersion(textDocument ? textDocument->document()->revision() : 0);
-
-    connect(document, &Core::IDocument::contentsChanged, this,
-            [this, document](){
-        documentContentsChanged(document);
-    });
-    if (textDocument) {
-        textDocument->completionAssistProvider();
-        m_resetAssistProvider << textDocument;
-        m_completionProvider.setTriggerCharacters(
-            m_serverCapabilities.completionProvider()
-                .value_or(ServerCapabilities::CompletionOptions())
-                .triggerCharacters()
-                .value_or(QList<QString>()));
-        textDocument->setCompletionAssistProvider(&m_completionProvider);
-        textDocument->setQuickFixAssistProvider(&m_quickFixProvider);
-        connect(textDocument, &QObject::destroyed, this, [this, textDocument]{
-            m_resetAssistProvider.remove(textDocument);
-        });
-    }
-
-    m_openedDocument.append(document->filePath());
-    sendContent(DidOpenTextDocumentNotification(DidOpenTextDocumentParams(item)));
-    if (textDocument)
-        requestDocumentSymbols(textDocument);
-
-    return true;
-}
-
-void Client::closeDocument(const DidCloseTextDocumentParams &params)
-{
-    sendContent(params.textDocument().uri(), DidCloseTextDocumentNotification(params));
 }
 
 bool Client::documentOpen(const Core::IDocument *document) const
@@ -670,37 +719,6 @@ void Client::registerCapabilities(const QList<Registration> &registrations)
 void Client::unregisterCapabilities(const QList<Unregistration> &unregistrations)
 {
     m_dynamicCapabilities.unregisterCapability(unregistrations);
-}
-
-template <typename Request>
-static bool sendTextDocumentPositionParamsRequest(Client *client,
-                                                  const Request &request,
-                                                  const DynamicCapabilities &dynamicCapabilities,
-                                                  const optional<bool> &serverCapability)
-{
-    if (!request.isValid(nullptr))
-        return false;
-    const DocumentUri uri = request.params().value().textDocument().uri();
-    const bool supportedFile = client->isSupportedUri(uri);
-    bool sendMessage = dynamicCapabilities.isRegistered(Request::methodName).value_or(false);
-    if (sendMessage) {
-        const TextDocumentRegistrationOptions option(dynamicCapabilities.option(Request::methodName));
-        if (option.isValid(nullptr))
-            sendMessage = option.filterApplies(FileName::fromString(QUrl(uri).adjusted(QUrl::PreferLocalFile).toString()));
-        else
-            sendMessage = supportedFile;
-    } else {
-        sendMessage = serverCapability.value_or(sendMessage) && supportedFile;
-    }
-    if (sendMessage)
-        client->sendContent(request);
-    return sendMessage;
-}
-
-bool Client::findLinkAt(GotoDefinitionRequest &request)
-{
-    return LanguageClient::sendTextDocumentPositionParamsRequest(
-                this, request, m_dynamicCapabilities, m_serverCapabilities.definitionProvider());
 }
 
 bool Client::findUsages(FindReferencesRequest &request)
@@ -991,12 +1009,6 @@ bool Client::isSupportedDocument(const Core::IDocument *document) const
 bool Client::isSupportedFile(const Utils::FileName &filePath, const QString &mimeType) const
 {
     return m_languagFilter.isSupported(filePath, mimeType);
-}
-
-bool Client::isSupportedUri(const DocumentUri &uri) const
-{
-    return m_languagFilter.isSupported(uri.toFileName(),
-                                       Utils::mimeTypeForFile(uri.toFileName().fileName()).name());
 }
 
 bool Client::needsRestart(const BaseSettings *settings) const

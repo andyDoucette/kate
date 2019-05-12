@@ -496,6 +496,15 @@ QString KateProjectPluginView::currentWord() const
 
 void KateProjectPluginView::slotProjectIndex()
 {
+    KTextEditor::View *kv = m_activeTextEditorView;
+    if (!kv) {
+        return;
+    }
+
+    m_plugin->lspClientManager().documentOpened(kv->document());
+
+    m_plugin->lspClientManager().findLinkAt(kv->document(), kv->cursorPosition(), [](const Utils::Link &) {});
+#if 0
     if (!m_toolView) {
         return;
     }
@@ -510,6 +519,7 @@ void KateProjectPluginView::slotProjectIndex()
         m_mainWindow->showToolView(m_toolInfoView);
         emit projectLookupWord(word);
     }
+#endif
 }
 
 void KateProjectPluginView::slotContextMenuAboutToShow()

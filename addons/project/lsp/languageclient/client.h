@@ -33,11 +33,15 @@
 #include <languageserverprotocol/shutdownmessages.h>
 #include <languageserverprotocol/textsynchronization.h>
 
+#include "dynamiccapabilities.h"
+
 #include <QBuffer>
 #include <QHash>
 #include <QProcess>
 #include <QJsonDocument>
 #include <QTextCursor>
+
+#include "kateproject.h"
 
 class KateProjectPlugin;
 
@@ -100,17 +104,18 @@ public:
     void handleMethod(const QString &method, LanguageServerProtocol::MessageId id,
                       const LanguageServerProtocol::IContent *content);
     void shutDownCallback(const LanguageServerProtocol::ShutdownRequest::Response &shutdownResponse);
+    bool findLinkAt(LanguageServerProtocol::GotoDefinitionRequest &request);
+    bool isSupportedUri(const LanguageServerProtocol::DocumentUri &uri) const;
+    bool openDocument(KTextEditor::Document *document);
+    void closeDocument(const LanguageServerProtocol::DidCloseTextDocumentParams &params);
 #if 0
     // document synchronization
-    bool openDocument(Core::IDocument *document);
-    void closeDocument(const LanguageServerProtocol::DidCloseTextDocumentParams &params);
     bool documentOpen(const Core::IDocument *document) const;
     void documentContentsSaved(Core::IDocument *document);
     void documentWillSave(Core::IDocument *document);
     void documentContentsChanged(Core::IDocument *document);
     void registerCapabilities(const QList<LanguageServerProtocol::Registration> &registrations);
     void unregisterCapabilities(const QList<LanguageServerProtocol::Unregistration> &unregistrations);
-    bool findLinkAt(LanguageServerProtocol::GotoDefinitionRequest &request);
     bool findUsages(LanguageServerProtocol::FindReferencesRequest &request);
     void requestDocumentSymbols(TextEditor::TextDocument *document);
     void cursorPositionChanged(TextEditor::TextEditorWidget *widget);
@@ -129,7 +134,6 @@ public:
     void setSupportedLanguage(const LanguageFilter &filter);
     bool isSupportedDocument(const Core::IDocument *document) const;
     bool isSupportedFile(const Utils::FileName &filePath, const QString &mimeType) const;
-    bool isSupportedUri(const LanguageServerProtocol::DocumentUri &uri) const;
 
     void setName(const QString &name) { m_displayName = name; }
     QString name() const { return m_displayName; }
@@ -164,7 +168,6 @@ private:
     LanguageFilter m_languagFilter;
     QList<Utils::FileName> m_openedDocument;
     Core::Id m_id;
-    DynamicCapabilities m_dynamicCapabilities;
     LanguageClientCompletionAssistProvider m_completionProvider;
     LanguageClientQuickFixProvider m_quickFixProvider;
     QSet<TextEditor::TextDocument *> m_resetAssistProvider;
@@ -177,6 +180,7 @@ private:
      * allows access to signals for project management
      */
     KateProjectPlugin * const m_projectPlugin = nullptr;
+    DynamicCapabilities m_dynamicCapabilities;
     int m_restartsLeft = 5;
     QString m_displayName;
     QHash<LanguageServerProtocol::MessageId, LanguageServerProtocol::ResponseHandler> m_responseHandlers;

@@ -109,6 +109,15 @@ public:
     bool autoSubversion() const;
     bool autoMercurial() const;
 
+    /**
+     * Manager for LSP clients
+     * Wraps usage of stuff like clangd, ccls, ...
+     */
+    LanguageClient::LanguageClientManager &lspClientManager()
+    {
+        return m_lspClientManager;
+    }
+
 Q_SIGNALS:
     /**
      * Signal that a new project got created.

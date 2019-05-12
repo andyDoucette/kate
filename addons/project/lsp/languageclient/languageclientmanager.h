@@ -58,6 +58,9 @@ public:
 
     void shutdown();
 
+    void findLinkAt(KTextEditor::Document *document, const KTextEditor::Cursor &cursor,
+                    Utils::ProcessLinkCallback callback);
+
 #if 0
     static QList<Client *> clientsSupportingDocument(const TextEditor::TextDocument *doc);
 
@@ -68,12 +71,14 @@ public:
 signals:
     void shutdownFinished();
 
-private Q_SLOTS:
+public Q_SLOTS:
     /**
      * A new project got created.
      * @param project new created project
      */
     void projectCreated(KateProject *project);
+    void documentOpened(KTextEditor::Document *document);
+    void documentClosed(KTextEditor::Document *document);
 
 private:
 
@@ -81,12 +86,8 @@ private:
 
 #if 0
     void editorOpened(Core::IEditor *editor);
-    void documentOpened(Core::IDocument *document);
-    void documentClosed(Core::IDocument *document);
     void documentContentsSaved(Core::IDocument *document);
     void documentWillSave(Core::IDocument *document);
-    void findLinkAt(const Utils::FileName &filePath, const QTextCursor &cursor,
-                    Utils::ProcessLinkCallback callback);
     void findUsages(const Utils::FileName &filePath, const QTextCursor &cursor);
 
     void projectAdded(ProjectExplorer::Project *project);

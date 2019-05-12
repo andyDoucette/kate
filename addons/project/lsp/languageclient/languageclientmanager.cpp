@@ -182,6 +182,47 @@ void LanguageClientManager::clientFinished(Client *client)
     }
 }
 
+void LanguageClientManager::findLinkAt(KTextEditor::Document *doc, const KTextEditor::Cursor &cursor,
+                    Utils::ProcessLinkCallback callback)
+{
+    const DocumentUri uri = DocumentUri::fromProtocol(doc->url().toString());
+    const TextDocumentIdentifier document(uri);
+    const Position pos(cursor.line(), cursor.column());
+    TextDocumentPositionParams params(document, pos);
+    GotoDefinitionRequest request(params);
+    request.setResponseCallback([callback](const GotoDefinitionRequest::Response &response){
+        if (Utils::optional<GotoResult> _result = response.result()) {
+            const GotoResult result = _result.value();
+            if (Utils::holds_alternative<std::nullptr_t>(result))
+                return;
+            if (auto ploc = Utils::get_if<Location>(&result)) {
+                callback(ploc->toLink());
+            } else if (auto plloc = Utils::get_if<QList<Location>>(&result)) {
+                if (!plloc->isEmpty())
+                    callback(plloc->value(0).toLink());
+            }
+        }
+    });
+    for (Client *interface : reachableClients()) {
+        if (interface->findLinkAt(request))
+            m_exclusiveRequests[request.id()] << interface;
+    }
+}
+
+void LanguageClientManager::documentOpened(KTextEditor::Document *document)
+{
+    for (Client *interface : reachableClients())
+        interface->openDocument(document);
+}
+
+void LanguageClientManager::documentClosed(KTextEditor::Document *document)
+{
+    const DidCloseTextDocumentParams params(
+        TextDocumentIdentifier(DocumentUri::fromProtocol(document->url().toString())));
+    for (Client *interface : reachableClients())
+        interface->closeDocument(params);
+}
+
 #if 0
 
 QList<Client *> LanguageClientManager::clientsSupportingDocument(
@@ -265,24 +306,6 @@ void LanguageClientManager::editorOpened(Core::IEditor *editor)
     }
 }
 
-void LanguageClientManager::documentOpened(Core::IDocument *document)
-{
-    for (BaseSettings *setting : LanguageClientSettings::currentPageSettings()) {
-        if (clientForSetting(setting) == nullptr && setting->canStartClient())
-            startClient(setting);
-    }
-    for (Client *interface : reachableClients())
-        interface->openDocument(document);
-}
-
-void LanguageClientManager::documentClosed(Core::IDocument *document)
-{
-    const DidCloseTextDocumentParams params(
-        TextDocumentIdentifier(DocumentUri::fromFileName(document->filePath())));
-    for (Client *interface : reachableClients())
-        interface->closeDocument(params);
-}
-
 void LanguageClientManager::documentContentsSaved(Core::IDocument *document)
 {
     for (Client *interface : reachableClients())
@@ -293,34 +316,6 @@ void LanguageClientManager::documentWillSave(Core::IDocument *document)
 {
     for (Client *interface : reachableClients())
         interface->documentContentsSaved(document);
-}
-
-void LanguageClientManager::findLinkAt(const Utils::FileName &filePath,
-                                       const QTextCursor &cursor,
-                                       Utils::ProcessLinkCallback callback)
-{
-    const DocumentUri uri = DocumentUri::fromFileName(filePath);
-    const TextDocumentIdentifier document(uri);
-    const Position pos(cursor);
-    TextDocumentPositionParams params(document, pos);
-    GotoDefinitionRequest request(params);
-    request.setResponseCallback([callback](const GotoDefinitionRequest::Response &response){
-        if (Utils::optional<GotoResult> _result = response.result()) {
-            const GotoResult result = _result.value();
-            if (Utils::holds_alternative<std::nullptr_t>(result))
-                return;
-            if (auto ploc = Utils::get_if<Location>(&result)) {
-                callback(ploc->toLink());
-            } else if (auto plloc = Utils::get_if<QList<Location>>(&result)) {
-                if (!plloc->isEmpty())
-                    callback(plloc->value(0).toLink());
-            }
-        }
-    });
-    for (Client *interface : reachableClients()) {
-        if (interface->findLinkAt(request))
-            m_exclusiveRequests[request.id()] << interface;
-    }
 }
 
 QList<Core::SearchResultItem> generateSearchResultItems(const LanguageClientArray<Location> &locations)
