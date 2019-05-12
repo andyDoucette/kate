@@ -24,6 +24,8 @@
 ****************************************************************************/
 
 #include "languageclientmanager.h"
+#include "client.h"
+#include "languageclientinterface.h"
 
 #include <languageserverprotocol/messages.h>
 #include <languageserverprotocol/workspace.h>
@@ -45,6 +47,12 @@ LanguageClientManager::LanguageClientManager(KateProjectPlugin *parent)
     JsonRpcMessageHandler::registerMessageProvider<ShowMessageRequest>();
     JsonRpcMessageHandler::registerMessageProvider<ShowMessageNotification>();
     JsonRpcMessageHandler::registerMessageProvider<WorkSpaceFolderRequest>();
+
+    /**
+     * start some clients, later make this configurable
+     */
+    startClient(new LanguageClient::Client (new LanguageClient::StdIOClientInterface (QStringLiteral("clangd"), QString())));
+    startClient(new LanguageClient::Client (new LanguageClient::StdIOClientInterface (QStringLiteral("ccls"), QString())));
 }
 
 LanguageClientManager::~LanguageClientManager()
