@@ -73,6 +73,18 @@ bool Client::start()
     return m_clientInterface->start();
 }
 
+bool Client::reset()
+{
+    if (!m_restartsLeft)
+        return false;
+    --m_restartsLeft;
+    m_state = Uninitialized;
+    m_responseHandlers.clear();
+    m_clientInterface->resetBuffer();
+    m_serverCapabilities = ServerCapabilities();
+    return true;
+}
+
 
 void Client::initialize()
 {
@@ -185,6 +197,39 @@ void Client::handleResponse(const MessageId &id, const QByteArray &content, QTex
 {
     if (auto handler = m_responseHandlers[id])
         handler(content, codec);
+}
+
+void Client::shutdown()
+{
+    QTC_ASSERT(m_state == Initialized, emit finished(); return);
+    qCDebug(LOGLSPCLIENT) << "shutdown language server " << m_displayName;
+    ShutdownRequest shutdown;
+    shutdown.setResponseCallback([this](const ShutdownRequest::Response &shutdownResponse){
+        shutDownCallback(shutdownResponse);
+    });
+    sendContent(shutdown);
+    m_state = ShutdownRequested;
+}
+
+Client::State Client::state() const
+{
+    return m_state;
+}
+
+void Client::shutDownCallback(const ShutdownRequest::Response &shutdownResponse)
+{
+    QTC_ASSERT(m_state == ShutdownRequested, return);
+    QTC_ASSERT(m_clientInterface, return);
+    optional<ShutdownRequest::Response::Error> errorValue = shutdownResponse.error();
+    if (errorValue.has_value()) {
+        ShutdownRequest::Response::Error error = errorValue.value();
+        qDebug() << error;
+        return;
+    }
+    // directly send data otherwise the state check would fail;
+    m_clientInterface->sendMessage(ExitNotification().toBaseMessage());
+    qCDebug(LOGLSPCLIENT) << "language server " << m_displayName << " shutdown";
+    m_state = Shutdown;
 }
 
 void Client::handleMethod(const QString &method, MessageId id, const IContent *content)
@@ -355,23 +400,6 @@ static ClientCapabilities generateClientCapabilities()
     capabilities.setTextDocument(documentCapabilities);
 
     return capabilities;
-}
-
-void Client::shutdown()
-{
-    QTC_ASSERT(m_state == Initialized, emit finished(); return);
-    qCDebug(LOGLSPCLIENT) << "shutdown language server " << m_displayName;
-    ShutdownRequest shutdown;
-    shutdown.setResponseCallback([this](const ShutdownRequest::Response &shutdownResponse){
-        shutDownCallback(shutdownResponse);
-    });
-    sendContent(shutdown);
-    m_state = ShutdownRequested;
-}
-
-Client::State Client::state() const
-{
-    return m_state;
 }
 
 bool Client::openDocument(Core::IDocument *document)
@@ -893,23 +921,6 @@ QList<Diagnostic> Client::diagnosticsAt(const DocumentUri &uri, const Range &ran
     return diagnostics;
 }
 
-bool Client::reset()
-{
-    if (!m_restartsLeft)
-        return false;
-    --m_restartsLeft;
-    m_state = Uninitialized;
-    m_responseHandlers.clear();
-    m_clientInterface->resetBuffer();
-    updateEditorToolBar(m_openedDocument);
-    m_openedDocument.clear();
-    m_serverCapabilities = ServerCapabilities();
-    m_dynamicCapabilities.reset();
-    for (const DocumentUri &uri : m_diagnostics.keys())
-        removeDiagnostics(uri);
-    return true;
-}
-
 const ServerCapabilities &Client::capabilities() const
 {
     return m_serverCapabilities;
@@ -1078,22 +1089,6 @@ void Client::handleDiagnostics(const PublishDiagnosticsParams &params)
     showDiagnostics(uri);
 
     requestCodeActions(uri, diagnostics);
-}
-
-void Client::shutDownCallback(const ShutdownRequest::Response &shutdownResponse)
-{
-    QTC_ASSERT(m_state == ShutdownRequested, return);
-    QTC_ASSERT(m_clientInterface, return);
-    optional<ShutdownRequest::Response::Error> errorValue = shutdownResponse.error();
-    if (errorValue.has_value()) {
-        ShutdownRequest::Response::Error error = errorValue.value();
-        qDebug() << error;
-        return;
-    }
-    // directly send data otherwise the state check would fail;
-    m_clientInterface->sendMessage(ExitNotification().toBaseMessage());
-    qCDebug(LOGLSPCLIENT) << "language server " << m_displayName << " shutdown";
-    m_state = Shutdown;
 }
 
 bool Client::sendWorkspceFolderChanges() const

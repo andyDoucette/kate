@@ -70,8 +70,8 @@ public:
     State state() const;
     bool reachable() const { return m_state == Initialized; }
     bool start();
+    bool reset();
 
-protected:
     void setError(const QString &message);
     void handleMessage(const LanguageServerProtocol::BaseMessage &message);
 
@@ -85,7 +85,7 @@ signals:
     void initialized(LanguageServerProtocol::ServerCapabilities capabilities);
     void finished();
 
-private:
+public:
     void intializeCallback(const LanguageServerProtocol::InitializeRequest::Response &initResponse);
 
     void sendContent(const LanguageServerProtocol::IContent &content);
@@ -97,6 +97,7 @@ private:
                         QTextCodec *codec);
     void handleMethod(const QString &method, LanguageServerProtocol::MessageId id,
                       const LanguageServerProtocol::IContent *content);
+    void shutDownCallback(const LanguageServerProtocol::ShutdownRequest::Response &shutdownResponse);
 #if 0
     // document synchronization
     bool openDocument(Core::IDocument *document);
@@ -139,8 +140,6 @@ private:
         const LanguageServerProtocol::DocumentUri &uri,
         const LanguageServerProtocol::Range &range) const;
 
-    bool reset();
-
     const LanguageServerProtocol::ServerCapabilities &capabilities() const;
     const DynamicCapabilities &dynamicCapabilities() const;
     const BaseClientInterface *clientInterface() const;
@@ -150,7 +149,6 @@ private:
 
     void handleDiagnostics(const LanguageServerProtocol::PublishDiagnosticsParams &params);
 
-    void shutDownCallback(const LanguageServerProtocol::ShutdownRequest::Response &shutdownResponse);
     bool sendWorkspceFolderChanges() const;
     void log(const LanguageServerProtocol::ShowMessageParams &message,
              Core::MessageManager::PrintToOutputPaneFlag flag = Core::MessageManager::NoModeSwitch);
@@ -169,10 +167,10 @@ private:
     LanguageClientQuickFixProvider m_quickFixProvider;
     QSet<TextEditor::TextDocument *> m_resetAssistProvider;
     QHash<LanguageServerProtocol::DocumentUri, LanguageServerProtocol::MessageId> m_highlightRequests;
-    int m_restartsLeft = 5;
     QMap<LanguageServerProtocol::DocumentUri, QList<TextMark *>> m_diagnostics;
     DocumentSymbolCache m_documentSymbolCache;
 #endif
+    int m_restartsLeft = 5;
     QString m_displayName;
     QHash<LanguageServerProtocol::MessageId, LanguageServerProtocol::ResponseHandler> m_responseHandlers;
     QScopedPointer<BaseClientInterface> m_clientInterface;

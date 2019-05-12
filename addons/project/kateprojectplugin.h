@@ -33,6 +33,8 @@
 #include "kateproject.h"
 #include "kateprojectcompletion.h"
 
+#include "lsp/languageclient/languageclientmanager.h"
+
 namespace ThreadWeaver {
     class Queue;
 }
@@ -174,6 +176,12 @@ private:
     bool m_autoMercurial : 1;
 
     ThreadWeaver::Queue *m_weaver;
+
+    /**
+     * Manager for LSP clients
+     * Wraps usage of stuff like clangd, ccls, ...
+     */
+    LanguageClient::LanguageClientManager m_lspClientManager;
 };
 
 #endif

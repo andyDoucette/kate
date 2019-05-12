@@ -26,20 +26,12 @@
 #pragma once
 
 #include "client.h"
-#include "languageclientsettings.h"
-
-#include <coreplugin/id.h>
 
 #include <languageserverprotocol/diagnostics.h>
 #include <languageserverprotocol/languagefeatures.h>
 #include <languageserverprotocol/textsynchronization.h>
 
-namespace Core {
-class IEditor;
-class IDocument;
-}
-
-namespace ProjectExplorer { class Project; }
+class KateProjectPlugin;
 
 namespace LanguageClient {
 
@@ -49,37 +41,34 @@ class LanguageClientManager : public QObject
 {
     Q_OBJECT
 public:
+    LanguageClientManager(KateProjectPlugin *parent);
     LanguageClientManager(const LanguageClientManager &other) = delete;
     LanguageClientManager(LanguageClientManager &&other) = delete;
     ~LanguageClientManager() override;
 
-    static void init();
+    void startClient(Client *client);
+    QVector<Client *> clients();
 
-    static void startClient(Client *client);
-    static void startClient(BaseSettings *setting);
-    static QVector<Client *> clients();
+    void addExclusiveRequest(const LanguageServerProtocol::MessageId &id, Client *client);
+    void reportFinished(const LanguageServerProtocol::MessageId &id, Client *byClient);
 
-    static void addExclusiveRequest(const LanguageServerProtocol::MessageId &id, Client *client);
-    static void reportFinished(const LanguageServerProtocol::MessageId &id, Client *byClient);
+    void deleteClient(Client *client);
 
-    static void deleteClient(Client *client);
+    void shutdown();
 
-    static void shutdown();
-
-    static LanguageClientManager *instance();
-
+#if 0
     static QList<Client *> clientsSupportingDocument(const TextEditor::TextDocument *doc);
 
     static void applySettings();
     static QList<BaseSettings *> currentSettings();
     static Client *clientForSetting(const BaseSettings *setting);
-
+#endif
 signals:
     void shutdownFinished();
 
 private:
-    LanguageClientManager(QObject *parent);
 
+#if 0
     void editorOpened(Core::IEditor *editor);
     void documentOpened(Core::IDocument *document);
     void documentClosed(Core::IDocument *document);
@@ -91,6 +80,13 @@ private:
 
     void projectAdded(ProjectExplorer::Project *project);
     void projectRemoved(ProjectExplorer::Project *project);
+#endif
+
+    /**
+     * the project plugin we belong to
+     * allows access to signals for project management
+     */
+    KateProjectPlugin * const m_projectPlugin = nullptr;
 
     QVector<Client *> reachableClients();
     void sendToAllReachableServers(const LanguageServerProtocol::IContent &content);
@@ -99,8 +95,6 @@ private:
 
     bool m_shuttingDown = false;
     QVector<Client *> m_clients;
-    QList<BaseSettings *>  m_currentSettings; // owned
-    QMap<QString, QPointer<Client>> m_clientsForSetting;
     QHash<LanguageServerProtocol::MessageId, QList<Client *>> m_exclusiveRequests;
 };
 } // namespace LanguageClient

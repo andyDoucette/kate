@@ -37,9 +37,6 @@
 
 #include "config.h"
 
-#include "lsp/languageclient/languageclientinterface.h"
-#include "lsp/languageclient/client.h"
-
 #ifdef HAVE_CTERMID
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -69,6 +66,7 @@ KateProjectPlugin::KateProjectPlugin(QObject *parent, const QList<QVariant> &)
     , m_autoSubversion(true)
     , m_autoMercurial(true)
     , m_weaver(new ThreadWeaver::Queue(this))
+    , m_lspClientManager(this)
 {
     qRegisterMetaType<KateProjectSharedQStandardItem>("KateProjectSharedQStandardItem");
     qRegisterMetaType<KateProjectSharedQMapStringItem>("KateProjectSharedQMapStringItem");
@@ -97,12 +95,6 @@ KateProjectPlugin::KateProjectPlugin(QObject *parent, const QList<QVariant> &)
     for (auto document : KTextEditor::Editor::instance()->application()->documents()) {
         slotDocumentCreated(document);
     }
-
-    // start language client
-    LanguageClient::StdIOClientInterface *testStd = new LanguageClient::StdIOClientInterface (QStringLiteral("clangd"), QString());
-    LanguageClient::Client *test = new LanguageClient::Client (testStd);
-    test->start();
-    test->initialize();
 }
 
 KateProjectPlugin::~KateProjectPlugin()
